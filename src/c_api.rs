@@ -18,7 +18,7 @@ use std::{
 
 use crate::{
     error::Error,
-    json_api::{read_file, read_ingredient_file, sign_file},
+    json_api::{read_file, read_ingredient_file, sign_file, embed_manifest},
     signer_info::SignerInfo,
 };
 
@@ -163,6 +163,43 @@ pub struct C2paSignerInfo {
     pub private_key: *const c_char,
     /// The timestamp authority URL or NULL
     pub ta_url: *const c_char,
+}
+
+/// Add a signed manifest to the file at path using auth_token
+/// Signature is precalculated and passed as argument
+///
+/// # Errors
+/// Returns an error field if there were errors
+///
+/// # Safety
+/// Reads from null terminated C strings
+/// The returned value MUST be released by calling release_string
+/// and it is no longer valid after that call.
+#[no_mangle]
+pub unsafe extern "C" fn c2pa_embed_manifest(
+    source_path: *const c_char,
+    dest_path: *const c_char,
+    manifest: *const c_char,
+    signature: *const c_char,
+    data_dir: *const c_char,
+) -> *mut c_char {
+    // convert C pointers into Rust
+    let source_path = from_cstr_null_check!(source_path);
+    let dest_path = from_cstr_null_check!(dest_path);
+    let manifest = from_cstr_null_check!(manifest);
+    let signature = from_cstr_null_check!(signature);
+    let data_dir = from_cstr_option!(data_dir);
+
+    // Read manifest from JSON and then sign and write it
+    let result = embed_manifest(&source_path, &dest_path, &manifest, &signature, data_dir);
+
+    match result {
+        Ok(_c2pa_data) => to_c_string("".to_string()),
+        Err(e) => {
+            e.set_last();
+            std::ptr::null_mut()
+        }
+    }
 }
 
 /// Add a signed manifest to the file at path using auth_token

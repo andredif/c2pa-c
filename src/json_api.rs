@@ -80,6 +80,40 @@ pub fn sign_file(
         .map_err(Error::from_c2pa_error)
 }
 
+/// Adds a manifest to the source file and writes the result to the destination file.
+/// Also returns the binary manifest data for optional cloud storage
+/// Signature is precalculated and passed as argument
+pub fn embed_manifest(
+    source: &str,
+    dest: &str,
+    manifest_json: &str,
+    signature: &str,
+    data_dir: Option<String>,
+) -> Result<Vec<u8>> {
+    let mut manifest = Manifest::from_json(manifest_json).map_err(Error::from_c2pa_error)?;
+
+    // if data_dir is provided, set the base path for the manifest
+    if let Some(path) = data_dir {
+        manifest
+            .with_base_path(path)
+            .map_err(Error::from_c2pa_error)?;
+    }
+
+    // If the source file has a manifest store, and no parent is specified, treat the source's manifest store as the parent.
+    if manifest.parent().is_none() {
+        let source_ingredient = Ingredient::from_file(source).map_err(Error::from_c2pa_error)?;
+        if source_ingredient.manifest_data().is_some() {
+            manifest
+                .set_parent(source_ingredient)
+                .map_err(Error::from_c2pa_error)?;
+        }
+    }
+    let signature_bytes = signature.as_bytes();
+    manifest
+        .embed_presigned_claim(&source, &dest, &signature_bytes)
+        .map_err(Error::from_c2pa_error)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
